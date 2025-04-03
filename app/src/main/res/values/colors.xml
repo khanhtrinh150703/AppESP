@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <color name="colorPrimary">#5330b9</color>
+    <color name="colorPrimaryDark">#1a1a1a</color>
+    <color name="colorAccent">#8181a8</color>
+
+    <color name="color_text">#1a1a1a</color>
+    <color name="color_orange">#ff5207</color>
+    <color name="color_dark_gray">#555555</color>
+    <color name="white">#FFFFFF</color>
+    <!-- Các màu đã có trong dự án của bạn -->
+
+        <!-- Thêm màu mới cho Splash Screen -->
+    <color name="splash_background">#FFFFFF</color> <!-- Màu nền Splash Screen, ví dụ: trắng -->
+    <color name="window_background">#FFFFFF</color> <!-- Màu nền activity, ví dụ: trắng -->
+</resources>
