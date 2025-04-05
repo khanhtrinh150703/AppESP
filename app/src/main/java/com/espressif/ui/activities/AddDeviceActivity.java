@@ -104,10 +104,10 @@ public class AddDeviceActivity extends AppCompatActivity implements MQTTService.
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_add_device);
         Log.d(TAG, "Layout set");
-
-        mqttService = new MQTTService(this);
-        mqttService.connect();
-        Log.d(TAG, "MQTT initialized");
+//
+//        mqttService = new MQTTService(this);
+//        mqttService.connect();
+//        Log.d(TAG, "MQTT initialized");
 
         intent = new Intent();
         sharedPreferences = getSharedPreferences(AppConstants.ESP_PREFERENCES, Context.MODE_PRIVATE);
