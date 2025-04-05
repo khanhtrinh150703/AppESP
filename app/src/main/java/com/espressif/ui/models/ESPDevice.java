@@ -15,6 +15,14 @@ public class ESPDevice {
         this.isRGBMode = false;  // Mặc định là chế độ Single
     }
 
+    public ESPDevice(String deviceId, String name, String commandTopic, boolean isLightOn, boolean isRGBMode){
+        this.deviceId = deviceId;
+        this.name = deviceId;    // Mặc định tên hiển thị là deviceId
+        this.commandTopic = commandTopic;
+        this.isLightOn = isLightOn;
+        this.isRGBMode = isRGBMode;
+    }
+
     public String getDeviceId() {
         return deviceId;
     }

@@ -20,6 +20,7 @@ import androidx.cardview.widget.CardView;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.espressif.ui.Data.AppDataManager;
+import com.espressif.ui.Data.DeviceDatabaseHelper;
 import com.espressif.ui.Services.MQTTService;
 import com.espressif.ui.models.ESPDevice;
 import com.espressif.wifi_provisioning.R;
@@ -35,6 +36,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
     private MQTTService mqttService;
     private final Handler handler = new Handler(Looper.getMainLooper());
 
+    private DeviceDatabaseHelper dpHelper;
     public DeviceAdapter(Context context, List<ESPDevice> devices, MQTTService mqttService) {
         this.context = context;
         this.deviceList = devices;
@@ -69,6 +71,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
             device.setLightOn(newState);
             String topic = device.getCommandTopic();
             String message = device.isRGBMode() ? (newState ? "onRGB" : "offRGB") : (newState ? "on" : "off");
+            DeviceDatabaseHelper.getInstance().updateDevice(device);
             Log.d(TAG, "Publishing: " + message + " to " + topic);
             publishMqttMessage(topic, message);
             handler.post(() -> {
@@ -92,6 +95,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
                     String topic = device.getCommandTopic();
                     String message = isRGB ? (device.isLightOn() ? "onRGB" : "offRGB") : (device.isLightOn() ? "on" : "off");
                     Log.d(TAG, "Publishing: " + message + " to " + topic);
+                    DeviceDatabaseHelper.getInstance().updateDevice(device);
                     publishMqttMessage(topic, message);
                     handler.post(() -> {
                         int currentPosition = holder.getAdapterPosition();
@@ -114,7 +118,8 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
                         if (!newName.isEmpty()) {
                             Log.d(TAG, "Renaming device " + device.getDeviceId() + " from " + device.getName() + " to " + newName);
                             device.setName(newName);
-                            AppDataManager.getInstance().updateDeviceName(device.getDeviceId(), newName);
+//                            AppDataManager.getInstance().updateDeviceName(device.getDeviceId(), newName);
+                            DeviceDatabaseHelper.getInstance().updateDevice(device);
                             handler.post(() -> {
                                 int currentPosition = holder.getAdapterPosition();
                                 if (currentPosition != RecyclerView.NO_POSITION) {
@@ -134,7 +139,8 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
                     String deviceId = deviceTmp.getDeviceId();
                     Log.d(TAG, "Delete clicked for device: " + deviceId);
 
-                    AppDataManager.getInstance().removeDevice(deviceId);
+//                    AppDataManager.getInstance().removeDevice(deviceId);
+                    DeviceDatabaseHelper.getInstance().removeDevice(deviceId);
                     String topic = deviceTmp.getCommandTopic();
                     String message = "deleteNVS";
                     Log.d(TAG, "Publishing: " + message + " to " + topic);

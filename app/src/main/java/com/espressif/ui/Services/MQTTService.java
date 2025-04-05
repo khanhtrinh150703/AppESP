@@ -3,6 +3,7 @@ package com.espressif.ui.Services;
 import android.util.Log;
 
 import com.espressif.ui.Data.AppDataManager;
+import com.espressif.ui.Data.DeviceDatabaseHelper;
 import com.hivemq.client.mqtt.MqttClient;
 import com.hivemq.client.mqtt.datatypes.MqttQos;
 import com.hivemq.client.mqtt.mqtt3.Mqtt3AsyncClient;
@@ -10,11 +11,11 @@ import com.hivemq.client.mqtt.mqtt3.Mqtt3AsyncClient;
 public class MQTTService {
     private Mqtt3AsyncClient client;
     private static final String TAG = "MQTTService";
-    private static final String BROKER_URL = "172.20.10.6";
+    private static final String BROKER_URL = "192.168.1.34";
     private static final int BROKER_PORT = 1883;
     private final String clientId;
     private MQTTCallback callback;
-
+    private DeviceDatabaseHelper dbHelper;
     // Interface để gửi dữ liệu về Activity
     public interface MQTTCallback {
         void onMessageReceived(String topic, String message);
@@ -58,7 +59,8 @@ public class MQTTService {
                 .callback(publish -> {
                     String message = new String(publish.getPayloadAsBytes());
                     Log.d(TAG, "Received message: " + message + " from topic: " + topic);
-                    AppDataManager.getInstance().handleMqttMessage(message, topic);
+//                    AppDataManager.getInstance().handleMqttMessage(message, topic);
+                    DeviceDatabaseHelper.getInstance().handleMqttMessage(message, topic);
                     if (callback != null) {
                         callback.onMessageReceived(topic, message);
                     }
