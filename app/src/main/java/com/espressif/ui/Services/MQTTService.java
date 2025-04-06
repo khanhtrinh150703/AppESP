@@ -11,12 +11,14 @@ public class MQTTService {
     private static final String TAG = "MQTTService";
     private static final String BROKER_URL = "192.168.1.34";
     private static final int BROKER_PORT = 1883;
+    private static final String DEFAULT_TOPIC_1 = "/phone/notification"; // Topic mặc định 1
+    private static final String DEFAULT_TOPIC_2 = "/speech/command";    // Topic mặc định 2
     private static MQTTService instance;
     private final Mqtt3AsyncClient client;
     private final String clientId;
     private MQTTCallback callback;
     private final DeviceDatabaseHelper dbHelper;
-    private final Context context; // Thêm biến context
+    private final Context context;
 
     // Interface để gửi dữ liệu về Activity
     public interface MQTTCallback {
@@ -27,15 +29,18 @@ public class MQTTService {
 
     // Constructor riêng tư cho Singleton
     private MQTTService(Context context) {
-        this.context = context.getApplicationContext(); // Gán context
+        this.context = context.getApplicationContext();
         this.clientId = "AndroidClient_" + System.currentTimeMillis();
-        this.dbHelper = DeviceDatabaseHelper.getInstance(context); // Khởi tạo dbHelper
+        this.dbHelper = DeviceDatabaseHelper.getInstance(context);
         this.client = MqttClient.builder()
                 .useMqttVersion3()
                 .serverHost(BROKER_URL)
                 .serverPort(BROKER_PORT)
                 .identifier(clientId)
                 .buildAsync();
+
+        // Kết nối ngay khi khởi tạo
+        connect();
     }
 
     // Phương thức tĩnh để lấy instance
@@ -51,7 +56,7 @@ public class MQTTService {
         this.callback = callback;
     }
 
-    // Kết nối MQTT
+    // Kết nối MQTT và subscribe 2 topic mặc định
     public void connect() {
         if (!isConnected()) {
             client.connectWith()
@@ -67,6 +72,9 @@ public class MQTTService {
                             if (callback != null) {
                                 callback.onConnected();
                             }
+                            // Subscribe 2 topic mặc định sau khi kết nối thành công
+                            subscribe(DEFAULT_TOPIC_1, MqttQos.AT_LEAST_ONCE);
+                            subscribe(DEFAULT_TOPIC_2, MqttQos.AT_LEAST_ONCE);
                         }
                     });
         } else {
@@ -74,6 +82,9 @@ public class MQTTService {
             if (callback != null) {
                 callback.onConnected();
             }
+            // Đảm bảo subscribe 2 topic mặc định nếu đã kết nối
+            subscribe(DEFAULT_TOPIC_1, MqttQos.AT_LEAST_ONCE);
+            subscribe(DEFAULT_TOPIC_2, MqttQos.AT_LEAST_ONCE);
         }
     }
 
@@ -86,7 +97,7 @@ public class MQTTService {
                     .callback(publish -> {
                         String message = new String(publish.getPayloadAsBytes());
                         Log.d(TAG, "Received message: " + message + " from topic: " + topic);
-                        dbHelper.handleMqttMessage(message, topic); // Xử lý tin nhắn
+                        dbHelper.handleMqttMessage(message, topic);
                         if (callback != null) {
                             callback.onMessageReceived(topic, message);
                         }
