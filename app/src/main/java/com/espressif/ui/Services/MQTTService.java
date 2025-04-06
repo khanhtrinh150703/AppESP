@@ -11,7 +11,7 @@ public class MQTTService {
     private static final String TAG = "MQTTService";
     private static final String BROKER_URL = "192.168.1.34";
     private static final int BROKER_PORT = 1883;
-    private static final String DEFAULT_TOPIC_1 = "/phone/notification"; // Topic mặc định 1
+    private static final String DEFAULT_TOPIC_1 = "/devices/notification"; // Topic mặc định 1
     private static final String DEFAULT_TOPIC_2 = "/speech/command";    // Topic mặc định 2
     private static MQTTService instance;
     private final Mqtt3AsyncClient client;
@@ -113,7 +113,7 @@ public class MQTTService {
                     .callback(publish -> {
                         String message = new String(publish.getPayloadAsBytes());
 //                        Log.d(TAG, "Received message: " + message + " from topic: " + topic);
-//                        dbHelper.handleMqttMessage(topic,message);
+                        dbHelper.handleMqttMessage(topic,message);
                         if (callback != null) {
                             callback.onMessageReceived(topic, message);
                         }

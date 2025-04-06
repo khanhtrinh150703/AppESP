@@ -27,7 +27,7 @@ public class DeviceDatabaseHelper extends SQLiteOpenHelper {
     public static final String COLUMN_IS_LIGHT_ON = "is_light_on";
     public static final String COLUMN_IS_RGB_MODE = "is_rgb_mode";
 
-    private static final String DEFAULT_TOPIC_1 = "/phone/notification"; // Topic mặc định 1
+    private static final String DEFAULT_TOPIC_1 = "/devices/notification"; // Topic mặc định 1
     private static final String DEFAULT_TOPIC_2 = "/speech/command";    // Topic mặc định 2
     private final Handler handler = new Handler(Looper.getMainLooper());
     private static DeviceDatabaseHelper instance;
