@@ -72,50 +72,106 @@ public class DeviceDatabaseHelper extends SQLiteOpenHelper {
         onCreate(db);
     }
 
+
+
+    // Tách hàm phụ
     public void handleMqttMessage(String topic, String message) {
         if (topic == null || message == null) {
-            Log.w(TAG, "Received null topic or message");
+            logWarning("Received null topic or message");
             return;
         }
 
-        Log.d(TAG, "Received topic: " + topic + ", message: " + message);
+        logDebug("Received topic: " + topic + ", message: " + message);
 
-        handler.post(() -> {
-            if ("deleteNVS".equals(message)) {
-                // Trường hợp xóa thiết bị, lấy deviceId từ topic
-                String[] parts = topic.split("/");
-                if (parts.length >= 3) {
-                    String deviceId = parts[2];
-                    removeDevice(deviceId);
-                } else {
-                    Log.w(TAG, "Invalid topic format for deleteNVS: " + topic);
-                }
-                return;
-            }
-
-            if (DEFAULT_TOPIC_1.equals(topic)) {
-                String[] msgParts = message.split("/");
-                if (msgParts.length >= 3) {
-                    String deviceId = msgParts[2];
-                    ESPDevice device = getDeviceById(deviceId);
-                    if (device == null) {
-                        addDevice(deviceId, message);
-                    }
-                } else {
-                    Log.w(TAG, "Invalid message format in /phone/notification: " + message);
-                }
-                return;
-            }
-
-            if (DEFAULT_TOPIC_2.equals(topic)) {
-                if ("turn on".equals(message)) {
-                    updateStateLight(true);
-                } else if ("turn off".equals(message)) {
-                    updateStateLight(false);
-                }
-            }
-        });
+        handler.post(() -> processMessage(topic, message));
     }
+
+    private void processMessage(String topic, String message) {
+        if (isDeleteRequest(message)) {
+            handleDeleteDevice(topic);
+            return;
+        }
+
+        if (isNotificationTopic(topic)) {
+            handleNotificationMessage(message);
+            return;
+        }
+
+        if (isLightControlTopic(topic)) {
+            handleLightControlMessage(message);
+            return;
+        }
+
+        handleDeviceSpecificMessage(topic, message);
+    }
+
+    private boolean isDeleteRequest(String message) {
+        return "deleteNVS".equals(message);
+    }
+
+    private boolean isNotificationTopic(String topic) {
+        return DEFAULT_TOPIC_1.equals(topic);
+    }
+
+    private boolean isLightControlTopic(String topic) {
+        return DEFAULT_TOPIC_2.equals(topic);
+    }
+
+    private void handleDeleteDevice(String topic) {
+        String deviceId = extractDeviceIdFromTopic(topic);
+        if (deviceId != null) {
+            removeDevice(deviceId);
+        } else {
+            logWarning("Invalid topic format for deleteNVS: " + topic);
+        }
+    }
+
+    private void handleNotificationMessage(String message) {
+        String[] parts = message.split("/");
+        if (parts.length >= 3) {
+            String deviceId = parts[2];
+            if (getDeviceById(deviceId) == null) {
+                addDevice(deviceId, message);
+            }
+        } else {
+            logWarning("Invalid message format in /phone/notification: " + message);
+        }
+    }
+
+    private void handleLightControlMessage(String message) {
+        switch (message) {
+            case "turn on":
+                updateStateLight(true);
+                break;
+            case "turn off":
+                updateStateLight(false);
+                break;
+            default:
+                logWarning("Unknown light control message: " + message);
+        }
+    }
+
+    private void handleDeviceSpecificMessage(String topic, String message) {
+        String deviceId = extractDeviceIdFromTopic(topic);
+        if (deviceId != null) {
+            int state = "on".equals(message) ? 1 : 0;
+            updateStateLight(deviceId, state);
+        }
+    }
+
+    private String extractDeviceIdFromTopic(String topic) {
+        String[] parts = topic.split("/");
+        return parts.length >= 3 ? parts[2] : null;
+    }
+
+    private void logWarning(String msg) {
+        Log.w(TAG, msg);
+    }
+
+    private void logDebug(String msg) {
+        Log.d(TAG, msg);
+    }
+
 
 
     // Cập nhật trạng thái đèn cho tất cả thiết bị (ít dùng hơn)

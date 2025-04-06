@@ -152,7 +152,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
     @Override
     public void onMessageReceived(String topic, String message) {
         dbHelper.handleMqttMessage(topic, message);
-        Log.d(TAG, "Received: aaaa " + message + " from " + topic);
+        Log.d(TAG, "Received: " + message + " from " + topic);
         updateAllUI(); // Cập nhật toàn bộ UI khi nhận tin nhắn MQTT
     }
 
