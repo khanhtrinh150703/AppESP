@@ -25,7 +25,7 @@ public class NewScreenActivity extends AppCompatActivity implements MQTTService.
 
     private DeviceDatabaseHelper dbHelper;
     private RecyclerView deviceRecyclerView;
-    private MQTTService mqttService;
+    private static MQTTService mqttService;
     private DeviceAdapter deviceAdapter;
     private List<ESPDevice> deviceList;
 
@@ -43,9 +43,8 @@ public class NewScreenActivity extends AppCompatActivity implements MQTTService.
             Log.d(TAG, "Layout set");
 
             // Khởi tạo MQTT
-            MQTTService mqttService = MQTTService.getInstance(this);
+            mqttService = MQTTService.getInstance(this);
             mqttService.setCallback(this);
-            mqttService.connect();
             Log.d(TAG, "MQTT initialized");
 
             // Lấy danh sách thiết bị
@@ -96,9 +95,7 @@ public class NewScreenActivity extends AppCompatActivity implements MQTTService.
     public void onMessageReceived(String topic, String message) {
         runOnUiThread(() -> {
 //            AppDataManager.getInstance().handleMqttMessage(topic, message);
-            if (deviceAdapter != null) {
-                deviceAdapter.notifyDataSetChanged();
-            }
+//            Log.d(TAG, "Received: " + message + " from " + topic);
         });
     }
 

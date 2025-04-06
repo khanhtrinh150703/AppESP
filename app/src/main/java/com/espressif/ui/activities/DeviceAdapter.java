@@ -19,7 +19,6 @@ import androidx.appcompat.widget.PopupMenu;
 import androidx.cardview.widget.CardView;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.espressif.ui.Data.AppDataManager;
 import com.espressif.ui.Data.DeviceDatabaseHelper;
 import com.espressif.ui.Services.MQTTService;
 import com.espressif.ui.models.ESPDevice;
@@ -28,24 +27,26 @@ import com.hivemq.client.mqtt.datatypes.MqttQos;
 
 import java.util.List;
 
-public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceViewHolder> {
+public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceViewHolder> implements MQTTService.MQTTCallback {
 
     private static final String TAG = "DeviceAdapter";
     private Context context;
     private List<ESPDevice> deviceList;
     private MQTTService mqttService;
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private DeviceDatabaseHelper dbHelper;
 
-    private DeviceDatabaseHelper dpHelper;
     public DeviceAdapter(Context context, List<ESPDevice> devices, MQTTService mqttService) {
         this.context = context;
         this.deviceList = devices;
         this.mqttService = mqttService;
+        this.dbHelper = DeviceDatabaseHelper.getInstance(context); // Khởi tạo dbHelper
     }
 
     @NonNull
     @Override
     public DeviceViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+        mqttService.setCallback(this);
         View view = LayoutInflater.from(context).inflate(R.layout.item_device, parent, false);
         return new DeviceViewHolder(view);
     }
@@ -58,7 +59,6 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
         holder.lightImageView.setImageResource(device.isLightOn() ? R.drawable.ic_light_on : R.drawable.ic_light_off);
         holder.deviceNameTextView.setText(device.getName());
 
-        // Đổi màu nền của CardView dựa trên chế độ RGB
         if (device.isRGBMode()) {
             holder.cardView.setCardBackgroundColor(0xFFADD8E6); // Light Blue cho RGB
         } else {
@@ -71,15 +71,10 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
             device.setLightOn(newState);
             String topic = device.getCommandTopic();
             String message = device.isRGBMode() ? (newState ? "onRGB" : "offRGB") : (newState ? "on" : "off");
-            DeviceDatabaseHelper.getInstance().updateDevice(device);
+            dbHelper.updateDevice(device);
             Log.d(TAG, "Publishing: " + message + " to " + topic);
             publishMqttMessage(topic, message);
-            handler.post(() -> {
-                int currentPosition = holder.getAdapterPosition();
-                if (currentPosition != RecyclerView.NO_POSITION) {
-                    notifyItemChanged(currentPosition);
-                }
-            });
+            updateOneUI(device.getDeviceId()); // Cập nhật UI cho thiết bị này
         });
 
         holder.menuButton.setOnClickListener(v -> {
@@ -94,15 +89,9 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
                     device.setRGBMode(isRGB);
                     String topic = device.getCommandTopic();
                     String message = isRGB ? (device.isLightOn() ? "onRGB" : "offRGB") : (device.isLightOn() ? "on" : "off");
-                    Log.d(TAG, "Publishing: " + message + " to " + topic);
-                    DeviceDatabaseHelper.getInstance().updateDevice(device);
+                    dbHelper.updateDevice(device);
                     publishMqttMessage(topic, message);
-                    handler.post(() -> {
-                        int currentPosition = holder.getAdapterPosition();
-                        if (currentPosition != RecyclerView.NO_POSITION) {
-                            notifyItemChanged(currentPosition);
-                        }
-                    });
+                    updateOneUI(device.getDeviceId());
                     return true;
                 } else if ("Rename".equals(item.getTitle())) {
                     Log.d(TAG, "Rename clicked for device: " + device.getDeviceId());
@@ -118,14 +107,8 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
                         if (!newName.isEmpty()) {
                             Log.d(TAG, "Renaming device " + device.getDeviceId() + " from " + device.getName() + " to " + newName);
                             device.setName(newName);
-//                            AppDataManager.getInstance().updateDeviceName(device.getDeviceId(), newName);
-                            DeviceDatabaseHelper.getInstance().updateDevice(device);
-                            handler.post(() -> {
-                                int currentPosition = holder.getAdapterPosition();
-                                if (currentPosition != RecyclerView.NO_POSITION) {
-                                    notifyItemChanged(currentPosition);
-                                }
-                            });
+                            dbHelper.updateDevice(device);
+                            updateOneUI(device.getDeviceId());
                         }
                     });
                     builder.setNegativeButton("Cancel", null);
@@ -139,19 +122,18 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
                     String deviceId = deviceTmp.getDeviceId();
                     Log.d(TAG, "Delete clicked for device: " + deviceId);
 
-//                    AppDataManager.getInstance().removeDevice(deviceId);
-                    DeviceDatabaseHelper.getInstance().removeDevice(deviceId);
+                    dbHelper.removeDevice(deviceId);
                     String topic = deviceTmp.getCommandTopic();
                     String message = "deleteNVS";
-                    Log.d(TAG, "Publishing: " + message + " to " + topic);
                     publishMqttMessage(topic, message);
                     handler.post(() -> {
                         if (pos < deviceList.size()) {
                             deviceList.remove(pos);
                             notifyItemRemoved(pos);
                             notifyItemRangeChanged(pos, deviceList.size());
-                            Intent intent = new Intent(context, NewScreenActivity.class);
-                            context.startActivity(intent);
+//                            Intent intent = new Intent(context, NewScreenActivity.class);
+//                            context.startActivity(intent);
+                            updateOneUI(device.getDeviceId());
                         }
                     });
                     return true;
@@ -167,6 +149,28 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
         return deviceList.size();
     }
 
+    @Override
+    public void onMessageReceived(String topic, String message) {
+        dbHelper.handleMqttMessage(topic, message);
+        Log.d(TAG, "Received: aaaa " + message + " from " + topic);
+        updateAllUI(); // Cập nhật toàn bộ UI khi nhận tin nhắn MQTT
+    }
+
+    @Override
+    public void onConnectionLost(Throwable cause) {
+        Log.e(TAG, "Connection lost: " + cause.getMessage());
+    }
+
+    @Override
+    public void onConnected() {
+        if (deviceList != null && !deviceList.isEmpty()) {
+            for (ESPDevice device : deviceList) {
+                mqttService.subscribe(device.getCommandTopic(), MqttQos.AT_LEAST_ONCE);
+            }
+            Log.d(TAG, "MQTT subscribed to topics");
+        }
+    }
+
     private void publishMqttMessage(String topic, String message) {
         if (mqttService != null) {
             try {
@@ -177,6 +181,38 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
         } else {
             Log.e(TAG, "MQTTService is null");
         }
+    }
+
+    // Cập nhật UI cho một thiết bị dựa trên deviceId
+    private void updateOneUI(String deviceId) {
+        handler.post(() -> {
+            for (int i = 0; i < deviceList.size(); i++) {
+                if (deviceList.get(i).getDeviceId().equals(deviceId)) {
+                    ESPDevice updatedDevice = dbHelper.getDeviceById(deviceId); // Lấy dữ liệu mới từ database
+                    if (updatedDevice != null) {
+                        deviceList.set(i, updatedDevice); // Cập nhật danh sách
+                        notifyItemChanged(i); // Làm mới mục
+                        Log.d(TAG, "UI updated for device: " + deviceId);
+                    }
+                    break;
+                }
+            }
+        });
+    }
+
+    // Cập nhật toàn bộ UI
+    private void updateAllUI() {
+        handler.post(() -> {
+            List<ESPDevice> updatedDevices = dbHelper.getAllDevices(); // Tải lại toàn bộ dữ liệu
+            if (updatedDevices != null && !updatedDevices.isEmpty()) {
+                deviceList.clear(); // Xóa danh sách cũ
+                deviceList.addAll(updatedDevices); // Thêm danh sách mới
+                notifyDataSetChanged(); // Làm mới toàn bộ RecyclerView
+                Log.d(TAG, "All UI updated with " + deviceList.size() + " devices");
+            } else {
+                Log.w(TAG, "No devices found to update UI");
+            }
+        });
     }
 
     static class DeviceViewHolder extends RecyclerView.ViewHolder {

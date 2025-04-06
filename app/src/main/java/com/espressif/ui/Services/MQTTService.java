@@ -19,6 +19,7 @@ public class MQTTService {
     private MQTTCallback callback;
     private final DeviceDatabaseHelper dbHelper;
     private final Context context;
+    private boolean isInitialized = false;
 
     // Interface để gửi dữ liệu về Activity
     public interface MQTTCallback {
@@ -31,22 +32,24 @@ public class MQTTService {
     private MQTTService(Context context) {
         this.context = context.getApplicationContext();
         this.clientId = "AndroidClient_" + System.currentTimeMillis();
-        this.dbHelper = DeviceDatabaseHelper.getInstance(context);
+        this.dbHelper = DeviceDatabaseHelper.getInstance(context); // Lấy instance
         this.client = MqttClient.builder()
                 .useMqttVersion3()
                 .serverHost(BROKER_URL)
                 .serverPort(BROKER_PORT)
                 .identifier(clientId)
                 .buildAsync();
-
-        // Kết nối ngay khi khởi tạo
         connect();
+        isInitialized = true;
     }
 
-    // Phương thức tĩnh để lấy instance
-    public static synchronized MQTTService getInstance(Context context) {
+    public static MQTTService getInstance(Context context) {
         if (instance == null) {
-            instance = new MQTTService(context);
+            synchronized (MQTTService.class) {
+                if (instance == null) {
+                    instance = new MQTTService(context);
+                }
+            }
         }
         return instance;
     }
@@ -69,22 +72,35 @@ public class MQTTService {
                             }
                         } else {
                             Log.d(TAG, "Connected to MQTT broker");
-                            if (callback != null) {
-                                callback.onConnected();
-                            }
-                            // Subscribe 2 topic mặc định sau khi kết nối thành công
+                            // Subscribe to both topics, then trigger callback
                             subscribe(DEFAULT_TOPIC_1, MqttQos.AT_LEAST_ONCE);
                             subscribe(DEFAULT_TOPIC_2, MqttQos.AT_LEAST_ONCE);
+                            // Ensure callback is called after subscriptions
+                            client.subscribeWith()
+                                    .topicFilter(DEFAULT_TOPIC_1)
+                                    .qos(MqttQos.AT_LEAST_ONCE)
+                                    .send()
+                                    .thenCompose(v -> client.subscribeWith()
+                                            .topicFilter(DEFAULT_TOPIC_2)
+                                            .qos(MqttQos.AT_LEAST_ONCE)
+                                            .send())
+                                    .whenComplete((subAck, subThrowable) -> {
+                                        if (subThrowable != null) {
+                                            Log.e(TAG, "Subscription failed: " + subThrowable.getMessage());
+                                        } else if (callback != null) {
+                                            callback.onConnected();
+                                        }
+                                    });
                         }
                     });
         } else {
             Log.d(TAG, "Already connected to MQTT broker");
+            // Ensure subscriptions are active
+            subscribe(DEFAULT_TOPIC_1, MqttQos.AT_LEAST_ONCE);
+            subscribe(DEFAULT_TOPIC_2, MqttQos.AT_LEAST_ONCE);
             if (callback != null) {
                 callback.onConnected();
             }
-            // Đảm bảo subscribe 2 topic mặc định nếu đã kết nối
-            subscribe(DEFAULT_TOPIC_1, MqttQos.AT_LEAST_ONCE);
-            subscribe(DEFAULT_TOPIC_2, MqttQos.AT_LEAST_ONCE);
         }
     }
 
@@ -96,8 +112,8 @@ public class MQTTService {
                     .qos(qos)
                     .callback(publish -> {
                         String message = new String(publish.getPayloadAsBytes());
-                        Log.d(TAG, "Received message: " + message + " from topic: " + topic);
-                        dbHelper.handleMqttMessage(message, topic);
+//                        Log.d(TAG, "Received message: " + message + " from topic: " + topic);
+//                        dbHelper.handleMqttMessage(topic,message);
                         if (callback != null) {
                             callback.onMessageReceived(topic, message);
                         }
