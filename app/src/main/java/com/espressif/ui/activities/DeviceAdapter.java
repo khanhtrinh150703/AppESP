@@ -1,7 +1,6 @@
 package com.espressif.ui.activities;
 
 import android.content.Context;
-import android.nfc.Tag;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
@@ -15,6 +14,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.PopupMenu;
 import androidx.cardview.widget.CardView;
 import androidx.recyclerview.widget.RecyclerView;
@@ -89,15 +89,14 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
                     String topic = device.getCommandTopic();
                     String message = isRGB ? (device.isLightOn() ? "onRGB" : "offRGB") : (device.isLightOn() ? "on" : "off");
 
-                    // Cập nhật database trước, sau đó cập nhật UI
                     dbHelper.updateDevice(device);
                     updateDeviceUI(holder, device);
                     Log.d(TAG, "Publishing after toggle: " + message + " to " + topic);
                     publishMqttMessage(topic, message);
                     return true;
-                }else if ("Rename".equals(item.getTitle())) {
+                } else if ("Rename".equals(item.getTitle())) {
                     Log.d(TAG, "Rename clicked for device: " + device.getDeviceId());
-                    android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(context);
+                    AlertDialog.Builder builder = new AlertDialog.Builder(context);
                     builder.setTitle("Rename Device");
 
                     final EditText input = new EditText(context);
@@ -107,7 +106,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
                     builder.setPositiveButton("OK", (dialog, which) -> {
                         String newName = input.getText().toString().trim();
                         if (!newName.isEmpty()) {
-                            Log.d(TAG, "Renaming device " + device.getDeviceId() + " to " + newName);
+                            Log.d(TAG, "Renaming device " + device.getDeviceId() + " to newName");
                             device.setName(newName);
                             dbHelper.updateDevice(device);
                             updateDeviceUI(holder, device);
@@ -120,27 +119,48 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
                     int pos = holder.getAdapterPosition();
                     if (pos == RecyclerView.NO_POSITION) return true;
 
-                    ESPDevice deviceTmp = deviceList.get(pos);
-                    String deviceId = deviceTmp.getDeviceId();
-                    Log.d(TAG, "Delete clicked for device: " + deviceId);
-
-                    dbHelper.removeDevice(deviceId);
-                    String topic = deviceTmp.getCommandTopic();
-                    String message = "deleteNVS";
-                    publishMqttMessage(topic, message);
-                    handler.post(() -> {
-                        if (pos < deviceList.size()) {
-                            deviceList.remove(pos);
-                            notifyItemRemoved(pos);
-                            notifyItemRangeChanged(pos, deviceList.size());
-                        }
-                    });
+                    ESPDevice deviceToDelete = deviceList.get(pos);
+                    showDeleteConfirmationDialog(deviceToDelete, pos);
                     return true;
                 }
                 return false;
             });
             popupMenu.show();
         });
+    }
+
+    private void showDeleteConfirmationDialog(ESPDevice device, int position) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(context);
+        builder.setTitle("Confirm Deletion");
+        builder.setMessage("Are you sure you want to delete device \"" + device.getName() + "\"?");
+        builder.setPositiveButton("Yes, Delete", (dialog, which) -> {
+            Log.d(TAG, "Delete confirmed for device: " + device.getDeviceId());
+            String topic = device.getCommandTopic();
+            String message = "deleteNVS";
+
+            // Xóa khỏi database và gửi MQTT message
+            dbHelper.removeDevice(device.getDeviceId());
+            publishMqttMessage(topic, message);
+
+            // Cập nhật UI
+            handler.post(() -> {
+                if (position < deviceList.size()) {
+                    deviceList.remove(position);
+                    notifyItemRemoved(position);
+                    notifyItemRangeChanged(position, deviceList.size());
+                }
+            });
+        });
+        builder.setNegativeButton("Cancel", (dialog, which) -> {
+            Log.d(TAG, "Delete cancelled for device: " + device.getDeviceId());
+            dialog.dismiss();
+        });
+        AlertDialog dialog = builder.create();
+        dialog.show();
+
+        // Tùy chỉnh giao diện dialog (tùy chọn)
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(context.getResources().getColor(android.R.color.holo_red_light));
+        dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(context.getResources().getColor(android.R.color.white));
     }
 
     @Override
@@ -157,16 +177,23 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
             for (int i = 0; i < deviceList.size(); i++) {
                 ESPDevice device = deviceList.get(i);
                 if (topic.equals(device.getCommandTopic())) {
-                    ESPDevice updatedDevice = dbHelper.getDeviceById(device.getDeviceId());
-                    if (updatedDevice != null) {
-                        // Chỉ cập nhật nếu trạng thái thay đổi
-                        if (updatedDevice.isLightOn() != device.isLightOn() ||
-                                updatedDevice.isRGBMode() != device.isRGBMode()) {
-                            deviceList.set(i, updatedDevice);
-                            notifyItemChanged(i);
-                            Log.d(TAG, "Updated UI for device: " + device.getDeviceId() +
-                                    ", LightOn: " + updatedDevice.isLightOn() +
-                                    ", RGBMode: " + updatedDevice.isRGBMode());
+                    if ("deleteNVS".equals(message)) {
+                        deviceList.remove(i);
+                        notifyItemRemoved(i);
+                        Log.d(TAG, "Removed device from UI: " + device.getDeviceId());
+                    } else {
+                        ESPDevice updatedDevice = dbHelper.getDeviceById(device.getDeviceId());
+                        if (updatedDevice != null) {
+                            if (updatedDevice.isLightOn() != device.isLightOn() ||
+                                    updatedDevice.isRGBMode() != device.isRGBMode() ||
+                                    !updatedDevice.getName().equals(device.getName())) {
+                                deviceList.set(i, updatedDevice);
+                                notifyItemChanged(i);
+                                Log.d(TAG, "Updated UI for device: " + device.getDeviceId() +
+                                        ", LightOn: " + updatedDevice.isLightOn() +
+                                        ", RGBMode: " + updatedDevice.isRGBMode() +
+                                        ", Name: " + updatedDevice.getName());
+                            }
                         }
                     }
                     break;
@@ -203,37 +230,18 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
         }
     }
 
-    private void updateOneUI(String deviceId) {
-        handler.post(() -> {
-            for (int i = 0; i < deviceList.size(); i++) {
-                if (deviceList.get(i).getDeviceId().equals(deviceId)) {
-                    ESPDevice updatedDevice = dbHelper.getDeviceById(deviceId);
-                    if (updatedDevice != null) {
-                        deviceList.set(i, updatedDevice);
-                        notifyItemChanged(i);
-                        Log.d(TAG, "UI updated for device: " + deviceId);
-                    }
-                    break;
-                }
-            }
-        });
-    }
-
     private void updateDeviceUI(DeviceViewHolder holder, ESPDevice device) {
-        // Cập nhật hình ảnh đèn dựa trên trạng thái
         holder.lightImageView.setImageResource(device.isLightOn() ?
                 R.drawable.ic_light_on : R.drawable.ic_light_off);
-        holder.lightImageView.clearColorFilter(); // Không áp dụng filter màu
-
-        // Cập nhật tên thiết bị và màu nền
+        holder.lightImageView.clearColorFilter();
         holder.deviceNameTextView.setText(device.getName());
-        holder.cardView.setSelected(device.isRGBMode()); // Kích hoạt selector dựa trên RGB mode
+        holder.cardView.setSelected(device.isRGBMode());
 
-        // Log thông tin debug
         Log.d(TAG, "UI updated for device: " + device.getDeviceId() +
                 ", LightOn: " + device.isLightOn() +
                 ", RGBMode: " + device.isRGBMode());
     }
+
     static class DeviceViewHolder extends RecyclerView.ViewHolder {
         CardView cardView;
         ImageView lightImageView;

@@ -158,37 +158,56 @@ public class DeviceDatabaseHelper extends SQLiteOpenHelper {
                 return;
             }
 
-            switch (message) {
-                case "onRGB":
-                    device.setLightOn(true);
-                    device.setRGBMode(true);
-                    break;
-                case "offRGB":
-                    device.setLightOn(false);
-                    device.setRGBMode(true);
-                    break;
-                case "on":
-                    device.setLightOn(true);
-                    device.setRGBMode(false);
-                    break;
-                case "off":
-                    device.setLightOn(false);
-                    device.setRGBMode(false);
-                    break;
-                default:
-                    logWarning("Unknown message: " + message + " for device: " + deviceId);
-                    return;
+            // Check if message starts with "name/" for setting device name
+            if (message.startsWith("name/")) {
+                String[] parts = message.split("/", 2); // Split into "name" and "<newName>"
+                if (parts.length == 2 && !parts[1].isEmpty()) {
+                    String newName = parts[1]; // Get the name after "name/"
+                    device.setName(newName);  // Set the new name
+                    updateDevice(device);     // Update the database
+                    logDebug("Set device name to: " + newName + " for device " + deviceId);
+                } else {
+                    logWarning("Invalid name format in message: " + message + " for device: " + deviceId);
+                }
+            } else if ("deleteNVS".equals(message)) {
+                try {
+                    removeDevice(device.getDeviceId());
+                    logDebug("Deleted device with ID: " + deviceId);
+                } catch (Exception e) {
+                    logWarning("Error deleting device with ID: " + deviceId + ": " + e.getMessage());
+                }
+            } else {
+                // Handle existing cases
+                switch (message) {
+                    case "onRGB":
+                        device.setLightOn(true);
+                        device.setRGBMode(true);
+                        break;
+                    case "offRGB":
+                        device.setLightOn(false);
+                        device.setRGBMode(true);
+                        break;
+                    case "on":
+                        device.setLightOn(true);
+                        device.setRGBMode(false);
+                        break;
+                    case "off":
+                        device.setLightOn(false);
+                        device.setRGBMode(false);
+                        break;
+                    default:
+                        logWarning("Unknown message: " + message + " for device: " + deviceId);
+                        return;
+                }
+                // Update database for state changes
+                updateDevice(device);
+                logDebug("Processed message: " + message + " for device " + deviceId +
+                        ", LightOn: " + device.isLightOn() + ", RGBMode: " + device.isRGBMode());
             }
-
-            // Cập nhật database với trạng thái mới
-            updateDevice(device);
-            logDebug("Processed message: " + message + " for device " + deviceId +
-                    ", LightOn: " + device.isLightOn() + ", RGBMode: " + device.isRGBMode());
         } else {
             logWarning("Could not extract device ID from topic: " + topic);
         }
     }
-
     private String extractDeviceIdFromTopic(String topic) {
         String[] parts = topic.split("/");
         return parts.length >= 3 ? parts[2] : null;
