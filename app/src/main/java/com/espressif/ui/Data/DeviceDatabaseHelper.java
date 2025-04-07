@@ -152,8 +152,40 @@ public class DeviceDatabaseHelper extends SQLiteOpenHelper {
     private void handleDeviceSpecificMessage(String topic, String message) {
         String deviceId = extractDeviceIdFromTopic(topic);
         if (deviceId != null) {
-            int state = "on".equals(message) ? 1 : 0;
-            updateStateLight(deviceId, state);
+            ESPDevice device = getDeviceById(deviceId);
+            if (device == null) {
+                logWarning("Device not found for ID: " + deviceId);
+                return;
+            }
+
+            switch (message) {
+                case "onRGB":
+                    device.setLightOn(true);
+                    device.setRGBMode(true);
+                    break;
+                case "offRGB":
+                    device.setLightOn(false);
+                    device.setRGBMode(true);
+                    break;
+                case "on":
+                    device.setLightOn(true);
+                    device.setRGBMode(false);
+                    break;
+                case "off":
+                    device.setLightOn(false);
+                    device.setRGBMode(false);
+                    break;
+                default:
+                    logWarning("Unknown message: " + message + " for device: " + deviceId);
+                    return;
+            }
+
+            // Cập nhật database với trạng thái mới
+            updateDevice(device);
+            logDebug("Processed message: " + message + " for device " + deviceId +
+                    ", LightOn: " + device.isLightOn() + ", RGBMode: " + device.isRGBMode());
+        } else {
+            logWarning("Could not extract device ID from topic: " + topic);
         }
     }
 
@@ -169,7 +201,6 @@ public class DeviceDatabaseHelper extends SQLiteOpenHelper {
     private void logDebug(String msg) {
         Log.d(TAG, msg);
     }
-
 
 
     // Cập nhật trạng thái đèn cho tất cả thiết bị (ít dùng hơn)
@@ -292,6 +323,7 @@ public class DeviceDatabaseHelper extends SQLiteOpenHelper {
         SQLiteDatabase db = this.getWritableDatabase();
         ContentValues values = new ContentValues();
 
+//        System.out.println(device.isRGBMode() ? 1 : 0);
         values.put(COLUMN_NAME, device.getName());
         values.put(COLUMN_COMMAND_TOPIC, device.getCommandTopic());
         values.put(COLUMN_IS_LIGHT_ON, device.isLightOn() ? 1 : 0);

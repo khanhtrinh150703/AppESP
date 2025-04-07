@@ -1,7 +1,7 @@
 package com.espressif.ui.activities;
 
 import android.content.Context;
-import android.content.Intent;
+import android.nfc.Tag;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
@@ -40,7 +40,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
         this.context = context;
         this.deviceList = devices;
         this.mqttService = mqttService;
-        this.dbHelper = DeviceDatabaseHelper.getInstance(context); // Khởi tạo dbHelper
+        this.dbHelper = DeviceDatabaseHelper.getInstance(context);
     }
 
     @NonNull
@@ -54,29 +54,28 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
     @Override
     public void onBindViewHolder(@NonNull DeviceViewHolder holder, int position) {
         ESPDevice device = deviceList.get(position);
-        Log.d(TAG, "Binding device: " + device.getDeviceId() + ", Name: " + device.getName() + ", LightOn: " + device.isLightOn() + ", RGBMode: " + device.isRGBMode());
+        Log.d(TAG, "Binding device: " + device.getDeviceId() + ", Name: " + device.getName() +
+                ", LightOn: " + device.isLightOn() + ", RGBMode: " + device.isRGBMode());
 
-        holder.lightImageView.setImageResource(device.isLightOn() ? R.drawable.ic_light_on : R.drawable.ic_light_off);
-        holder.deviceNameTextView.setText(device.getName());
+        // Cập nhật UI ban đầu
+        updateDeviceUI(holder, device);
 
-        if (device.isRGBMode()) {
-            holder.cardView.setCardBackgroundColor(0xFFADD8E6); // Light Blue cho RGB
-        } else {
-            holder.cardView.setCardBackgroundColor(0xFFFFFFFF); // White cho Single
-        }
-
+        // Sự kiện bật/tắt đèn
         holder.lightImageView.setOnClickListener(v -> {
             Log.d(TAG, "Light clicked for device: " + device.getDeviceId());
             boolean newState = !device.isLightOn();
             device.setLightOn(newState);
             String topic = device.getCommandTopic();
             String message = device.isRGBMode() ? (newState ? "onRGB" : "offRGB") : (newState ? "on" : "off");
+
+            // Cập nhật database trước, sau đó cập nhật UI
             dbHelper.updateDevice(device);
+            updateDeviceUI(holder, device);
             Log.d(TAG, "Publishing: " + message + " to " + topic);
             publishMqttMessage(topic, message);
-            updateOneUI(device.getDeviceId()); // Cập nhật UI cho thiết bị này
         });
 
+        // Sự kiện menu
         holder.menuButton.setOnClickListener(v -> {
             PopupMenu popupMenu = new PopupMenu(context, holder.menuButton);
             popupMenu.getMenu().add("Toggle Mode");
@@ -89,11 +88,14 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
                     device.setRGBMode(isRGB);
                     String topic = device.getCommandTopic();
                     String message = isRGB ? (device.isLightOn() ? "onRGB" : "offRGB") : (device.isLightOn() ? "on" : "off");
+
+                    // Cập nhật database trước, sau đó cập nhật UI
                     dbHelper.updateDevice(device);
+                    updateDeviceUI(holder, device);
+                    Log.d(TAG, "Publishing after toggle: " + message + " to " + topic);
                     publishMqttMessage(topic, message);
-                    updateOneUI(device.getDeviceId());
                     return true;
-                } else if ("Rename".equals(item.getTitle())) {
+                }else if ("Rename".equals(item.getTitle())) {
                     Log.d(TAG, "Rename clicked for device: " + device.getDeviceId());
                     android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(context);
                     builder.setTitle("Rename Device");
@@ -105,10 +107,10 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
                     builder.setPositiveButton("OK", (dialog, which) -> {
                         String newName = input.getText().toString().trim();
                         if (!newName.isEmpty()) {
-                            Log.d(TAG, "Renaming device " + device.getDeviceId() + " from " + device.getName() + " to " + newName);
+                            Log.d(TAG, "Renaming device " + device.getDeviceId() + " to " + newName);
                             device.setName(newName);
                             dbHelper.updateDevice(device);
-                            updateOneUI(device.getDeviceId());
+                            updateDeviceUI(holder, device);
                         }
                     });
                     builder.setNegativeButton("Cancel", null);
@@ -131,9 +133,6 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
                             deviceList.remove(pos);
                             notifyItemRemoved(pos);
                             notifyItemRangeChanged(pos, deviceList.size());
-//                            Intent intent = new Intent(context, NewScreenActivity.class);
-//                            context.startActivity(intent);
-                            updateOneUI(device.getDeviceId());
                         }
                     });
                     return true;
@@ -151,9 +150,29 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
 
     @Override
     public void onMessageReceived(String topic, String message) {
-        dbHelper.handleMqttMessage(topic, message);
         Log.d(TAG, "Received: " + message + " from " + topic);
-        updateAllUI(); // Cập nhật toàn bộ UI khi nhận tin nhắn MQTT
+        dbHelper.handleMqttMessage(topic, message);
+
+        handler.post(() -> {
+            for (int i = 0; i < deviceList.size(); i++) {
+                ESPDevice device = deviceList.get(i);
+                if (topic.equals(device.getCommandTopic())) {
+                    ESPDevice updatedDevice = dbHelper.getDeviceById(device.getDeviceId());
+                    if (updatedDevice != null) {
+                        // Chỉ cập nhật nếu trạng thái thay đổi
+                        if (updatedDevice.isLightOn() != device.isLightOn() ||
+                                updatedDevice.isRGBMode() != device.isRGBMode()) {
+                            deviceList.set(i, updatedDevice);
+                            notifyItemChanged(i);
+                            Log.d(TAG, "Updated UI for device: " + device.getDeviceId() +
+                                    ", LightOn: " + updatedDevice.isLightOn() +
+                                    ", RGBMode: " + updatedDevice.isRGBMode());
+                        }
+                    }
+                    break;
+                }
+            }
+        });
     }
 
     @Override
@@ -166,8 +185,8 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
         if (deviceList != null && !deviceList.isEmpty()) {
             for (ESPDevice device : deviceList) {
                 mqttService.subscribe(device.getCommandTopic(), MqttQos.AT_LEAST_ONCE);
+                Log.d(TAG, "Subscribed to topic: " + device.getCommandTopic());
             }
-            Log.d(TAG, "MQTT subscribed to topics");
         }
     }
 
@@ -175,6 +194,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
         if (mqttService != null) {
             try {
                 mqttService.publish(topic, message, MqttQos.AT_LEAST_ONCE);
+                Log.d(TAG, "Published: " + message + " to " + topic);
             } catch (Exception e) {
                 Log.e(TAG, "MQTT publish failed: " + e.getMessage());
             }
@@ -183,15 +203,14 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
         }
     }
 
-    // Cập nhật UI cho một thiết bị dựa trên deviceId
     private void updateOneUI(String deviceId) {
         handler.post(() -> {
             for (int i = 0; i < deviceList.size(); i++) {
                 if (deviceList.get(i).getDeviceId().equals(deviceId)) {
-                    ESPDevice updatedDevice = dbHelper.getDeviceById(deviceId); // Lấy dữ liệu mới từ database
+                    ESPDevice updatedDevice = dbHelper.getDeviceById(deviceId);
                     if (updatedDevice != null) {
-                        deviceList.set(i, updatedDevice); // Cập nhật danh sách
-                        notifyItemChanged(i); // Làm mới mục
+                        deviceList.set(i, updatedDevice);
+                        notifyItemChanged(i);
                         Log.d(TAG, "UI updated for device: " + deviceId);
                     }
                     break;
@@ -200,21 +219,25 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
         });
     }
 
-    // Cập nhật toàn bộ UI
-    private void updateAllUI() {
-        handler.post(() -> {
-            List<ESPDevice> updatedDevices = dbHelper.getAllDevices(); // Tải lại toàn bộ dữ liệu
-            if (updatedDevices != null && !updatedDevices.isEmpty()) {
-                deviceList.clear(); // Xóa danh sách cũ
-                deviceList.addAll(updatedDevices); // Thêm danh sách mới
-                notifyDataSetChanged(); // Làm mới toàn bộ RecyclerView
-                Log.d(TAG, "All UI updated with " + deviceList.size() + " devices");
-            } else {
-                Log.w(TAG, "No devices found to update UI");
-            }
-        });
-    }
+    private void updateDeviceUI(DeviceViewHolder holder, ESPDevice device) {
+        // Cập nhật hình ảnh đèn dựa trên trạng thái
+        holder.lightImageView.setImageResource(device.isLightOn() ?
+                R.drawable.ic_light_on : R.drawable.ic_light_off);
+        holder.lightImageView.clearColorFilter(); // Không áp dụng filter màu
 
+        // Cập nhật tên thiết bị và màu nền
+        holder.deviceNameTextView.setText(device.getName());
+        if (device.isRGBMode()) {
+            holder.cardView.setCardBackgroundColor(0xFFE0F7FA); // Màu xanh dương nhạt khi ở RGB mode
+        } else {
+            holder.cardView.setCardBackgroundColor(0xFFF3F4F6); // Màu trắng mặc định khi không ở RGB mode
+        }
+
+        // Log thông tin debug
+        Log.d(TAG, "UI updated for device: " + device.getDeviceId() +
+                ", LightOn: " + device.isLightOn() +
+                ", RGBMode: " + device.isRGBMode());
+    }
     static class DeviceViewHolder extends RecyclerView.ViewHolder {
         CardView cardView;
         ImageView lightImageView;
