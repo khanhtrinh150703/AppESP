@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="16dp"
-    android:background="#F5F5F5">
+    android:background="@drawable/gradient_background"
+    android:padding="16dp">
 
     <!-- Tiêu đề -->
     <TextView
@@ -12,58 +12,60 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="MQTT Light Control"
-        android:textSize="24sp"
+        android:textSize="26sp"
         android:textStyle="bold"
         android:textColor="#212121"
-        android:layout_alignParentStart="true"
-        android:layout_alignParentTop="true" />
+        android:letterSpacing="0.02"
+        android:fontFamily="sans-serif-medium"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        android:layout_marginTop="16dp" />
 
-    <!-- Floating Action Button không dính vào RecyclerView -->
+    <!-- RecyclerView -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/deviceRecyclerView"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="@drawable/rounded_background_full"
+        android:clipToPadding="false"
+        android:padding="12dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="16dp"
+        android:elevation="6dp"
+        app:layout_constraintTop_toBottomOf="@id/titleTextView"
+        app:layout_constraintBottom_toTopOf="@id/bottomNavMenu"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Floating Action Button -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fabAdd"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_alignParentEnd="true"
-        android:layout_alignTop="@id/titleTextView"
-        android:layout_marginEnd="8dp"
-        app:backgroundTint="@color/white"
         android:contentDescription="Add new device"
         android:src="@android:drawable/ic_input_add"
-        android:scaleType="centerInside"
-        android:paddingTop="0dp"
-        android:paddingBottom="16dp"
-        android:paddingLeft="8dp"
-        android:paddingRight="8dp"
-        app:fabSize="normal"
+        app:backgroundTint="@android:color/white"
         app:rippleColor="#80FFFFFF"
-        android:elevation="6dp" />
-
-
-    <!-- RecyclerView hiển thị bóng đèn, tăng margin để tránh FAB -->
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/deviceRecyclerView"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_below="@id/titleTextView"
-        android:layout_above="@id/bottomNavMenu"
-        android:background="@drawable/rounded_background_full"
-        android:clipToPadding="false"
-        android:padding="8dp"
-        android:layout_marginTop="40dp"
-        android:layout_marginBottom="8dp"
-        android:elevation="4dp" />
+        app:fabSize="normal"
+        android:elevation="8dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/bottomNavMenu" />
 
     <!-- Bottom Navigation View -->
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/bottomNavMenu"
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="70dp"
-        android:layout_alignParentBottom="true"
         android:background="@drawable/rounded_bottom_nav_full"
-        android:elevation="8dp"
+        android:elevation="10dp"
         app:menu="@menu/bottom_nav_menu"
         app:itemIconTint="@color/colors"
         app:itemTextColor="@color/colors"
-        app:labelVisibilityMode="labeled" />
+        app:labelVisibilityMode="labeled"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
-</RelativeLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

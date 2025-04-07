@@ -227,11 +227,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
 
         // Cập nhật tên thiết bị và màu nền
         holder.deviceNameTextView.setText(device.getName());
-        if (device.isRGBMode()) {
-            holder.cardView.setCardBackgroundColor(0xFFE0F7FA); // Màu xanh dương nhạt khi ở RGB mode
-        } else {
-            holder.cardView.setCardBackgroundColor(0xFFF3F4F6); // Màu trắng mặc định khi không ở RGB mode
-        }
+        holder.cardView.setSelected(device.isRGBMode()); // Kích hoạt selector dựa trên RGB mode
 
         // Log thông tin debug
         Log.d(TAG, "UI updated for device: " + device.getDeviceId() +
