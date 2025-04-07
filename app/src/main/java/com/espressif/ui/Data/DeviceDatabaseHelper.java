@@ -72,8 +72,6 @@ public class DeviceDatabaseHelper extends SQLiteOpenHelper {
         onCreate(db);
     }
 
-
-
     // Tách hàm phụ
     public void handleMqttMessage(String topic, String message) {
         if (topic == null || message == null) {
@@ -134,7 +132,7 @@ public class DeviceDatabaseHelper extends SQLiteOpenHelper {
                 addDevice(deviceId, message);
             }
         } else {
-            logWarning("Invalid message format in /phone/notification: " + message);
+            logWarning("Invalid message format in /devices/notification: " + message);
         }
     }
 
