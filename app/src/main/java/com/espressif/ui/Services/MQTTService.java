@@ -9,7 +9,7 @@ import com.hivemq.client.mqtt.mqtt3.Mqtt3AsyncClient;
 
 public class MQTTService {
     private static final String TAG = "MQTTService";
-    private static final String BROKER_URL = "192.168.1.34";
+    private static final String BROKER_URL = "10.15.22.11";
     private static final int BROKER_PORT = 1883;
     private static final String DEFAULT_TOPIC_1 = "/devices/notification"; // Topic mặc định 1
     private static final String DEFAULT_TOPIC_2 = "/speech/command";    // Topic mặc định 2

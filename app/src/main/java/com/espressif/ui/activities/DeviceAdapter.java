@@ -57,10 +57,10 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
         Log.d(TAG, "Binding device: " + device.getDeviceId() + ", Name: " + device.getName() +
                 ", LightOn: " + device.isLightOn() + ", RGBMode: " + device.isRGBMode());
 
-        // Cập nhật UI ban đầu
+        // Update initial UI
         updateDeviceUI(holder, device);
 
-        // Sự kiện bật/tắt đèn
+        // Light toggle event
         holder.lightImageView.setOnClickListener(v -> {
             Log.d(TAG, "Light clicked for device: " + device.getDeviceId());
             boolean newState = !device.isLightOn();
@@ -68,14 +68,13 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
             String topic = device.getCommandTopic();
             String message = device.isRGBMode() ? (newState ? "onRGB" : "offRGB") : (newState ? "on" : "off");
 
-            // Cập nhật database trước, sau đó cập nhật UI
             dbHelper.updateDevice(device);
             updateDeviceUI(holder, device);
             Log.d(TAG, "Publishing: " + message + " to " + topic);
             publishMqttMessage(topic, message);
         });
 
-        // Sự kiện menu
+        // Menu event
         holder.menuButton.setOnClickListener(v -> {
             PopupMenu popupMenu = new PopupMenu(context, holder.menuButton);
             popupMenu.getMenu().add("Toggle Mode");
@@ -106,7 +105,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
                     builder.setPositiveButton("OK", (dialog, which) -> {
                         String newName = input.getText().toString().trim();
                         if (!newName.isEmpty()) {
-                            Log.d(TAG, "Renaming device " + device.getDeviceId() + " to newName");
+                            Log.d(TAG, "Renaming device " + device.getDeviceId() + " to " + newName);
                             device.setName(newName);
                             dbHelper.updateDevice(device);
                             updateDeviceUI(holder, device);
@@ -138,11 +137,9 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
             String topic = device.getCommandTopic();
             String message = "deleteNVS";
 
-            // Xóa khỏi database và gửi MQTT message
             dbHelper.removeDevice(device.getDeviceId());
             publishMqttMessage(topic, message);
 
-            // Cập nhật UI
             handler.post(() -> {
                 if (position < deviceList.size()) {
                     deviceList.remove(position);
@@ -158,7 +155,6 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
         AlertDialog dialog = builder.create();
         dialog.show();
 
-        // Tùy chỉnh giao diện dialog (tùy chọn)
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(context.getResources().getColor(android.R.color.holo_red_light));
         dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(context.getResources().getColor(android.R.color.white));
     }
@@ -177,13 +173,23 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
             for (int i = 0; i < deviceList.size(); i++) {
                 ESPDevice device = deviceList.get(i);
                 if (topic.equals(device.getCommandTopic())) {
-                    if ("deleteNVS".equals(message)) {
-                        deviceList.remove(i);
-                        notifyItemRemoved(i);
-                        Log.d(TAG, "Removed device from UI: " + device.getDeviceId());
-                    } else {
-                        ESPDevice updatedDevice = dbHelper.getDeviceById(device.getDeviceId());
-                        if (updatedDevice != null) {
+                    ESPDevice updatedDevice = dbHelper.getDeviceById(device.getDeviceId());
+                    if (updatedDevice != null) {
+                        if ("deleteNVS".equals(message)) {
+                            deviceList.remove(i);
+                            notifyItemRemoved(i);
+                            Log.d(TAG, "Removed device from UI: " + device.getDeviceId());
+                        } else if ("turn on".equals(message) || "onRGB".equals(message)) {
+                            updatedDevice.setLightOn(true);
+                            deviceList.set(i, updatedDevice);
+                            notifyItemChanged(i);
+                            Log.d(TAG, "Turned on device: " + device.getDeviceId());
+                        } else if ("turn off".equals(message) || "offRGB".equals(message)) {
+                            updatedDevice.setLightOn(false);
+                            deviceList.set(i, updatedDevice);
+                            notifyItemChanged(i);
+                            Log.d(TAG, "Turned off device: " + device.getDeviceId());
+                        } else {
                             if (updatedDevice.isLightOn() != device.isLightOn() ||
                                     updatedDevice.isRGBMode() != device.isRGBMode() ||
                                     !updatedDevice.getName().equals(device.getName())) {
