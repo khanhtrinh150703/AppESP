@@ -9,7 +9,7 @@ import com.hivemq.client.mqtt.mqtt3.Mqtt3AsyncClient;
 
 public class MQTTService {
     private static final String TAG = "MQTTService";
-    private static final String BROKER_URL = "10.15.22.11";
+    private static final String BROKER_URL = "172.20.10.6";
     private static final int BROKER_PORT = 1883;
     private static final String DEFAULT_TOPIC_1 = "/devices/notification"; // Topic mặc định 1
     private static final String DEFAULT_TOPIC_2 = "/speech/command";    // Topic mặc định 2
@@ -19,7 +19,7 @@ public class MQTTService {
     private MQTTCallback callback;
     private final DeviceDatabaseHelper dbHelper;
     private final Context context;
-    private boolean isInitialized = false;
+    public static  boolean isInitialized = false;
 
     // Interface để gửi dữ liệu về Activity
     public interface MQTTCallback {
@@ -113,6 +113,7 @@ public class MQTTService {
                     .callback(publish -> {
                         String message = new String(publish.getPayloadAsBytes());
 //                        Log.d(TAG, "Received message: " + message + " from topic: " + topic);
+                        subscribe(message, MqttQos.AT_LEAST_ONCE);
                         dbHelper.handleMqttMessage(topic,message);
                         if (callback != null) {
                             callback.onMessageReceived(topic, message);

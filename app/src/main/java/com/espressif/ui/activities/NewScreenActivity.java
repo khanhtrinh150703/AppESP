@@ -43,8 +43,10 @@ public class NewScreenActivity extends AppCompatActivity implements MQTTService.
             Log.d(TAG, "Layout set");
 
             // Khởi tạo MQTT
-            mqttService = MQTTService.getInstance(this);
-            mqttService.setCallback(this);
+            while (MQTTService.isInitialized){
+                mqttService = MQTTService.getInstance(this);
+                mqttService.setCallback(this);
+            }
             Log.d(TAG, "MQTT initialized");
 
             // Lấy danh sách thiết bị
