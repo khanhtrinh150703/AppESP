@@ -3,6 +3,7 @@ package com.espressif.ui.Services;
 import android.content.Context;
 import android.util.Log;
 import com.espressif.ui.Data.DeviceDatabaseHelper;
+import com.espressif.ui.models.ESPDevice;
 import com.hivemq.client.mqtt.MqttClient;
 import com.hivemq.client.mqtt.datatypes.MqttQos;
 import com.hivemq.client.mqtt.mqtt3.Mqtt3AsyncClient;
@@ -117,6 +118,8 @@ public class MQTTService {
                     }
                 });
     }
+
+
 
     public void publish(String topic, String message, MqttQos qos) {
         if (!isConnected()) {
