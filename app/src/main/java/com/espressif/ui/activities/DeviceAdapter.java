@@ -54,6 +54,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
     @Override
     public void onBindViewHolder(@NonNull DeviceViewHolder holder, int position) {
         ESPDevice device = deviceList.get(position);
+        mqttService.subscribe(device.getCommandTopic(),MqttQos.AT_LEAST_ONCE);
         Log.d(TAG, "Binding device: " + device.getDeviceId() + ", Name: " + device.getName() +
                 ", LightOn: " + device.isLightOn() + ", RGBMode: " + device.isRGBMode());
 

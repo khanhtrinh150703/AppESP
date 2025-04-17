@@ -9,6 +9,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 
+import com.espressif.ui.Services.MQTTService;
 import com.espressif.ui.models.ESPDevice;
 
 import java.util.ArrayList;

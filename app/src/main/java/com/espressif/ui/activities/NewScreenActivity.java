@@ -6,6 +6,7 @@ import android.util.Log;
 import android.view.View;
 import android.widget.Toast;
 
+import androidx.appcompat.app.AlertDialog;
 import androidx.core.splashscreen.SplashScreen;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.GridLayoutManager;
@@ -31,10 +32,9 @@ public class NewScreenActivity extends AppCompatActivity implements MQTTService.
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-
         try {
             DeviceDatabaseHelper.getInstance(this);
-            // Thêm Splash Screen
+            // Add Splash Screen
             SplashScreen splashScreen = SplashScreen.installSplashScreen(this);
             Log.d(TAG, "Splash Screen installed");
 
@@ -42,68 +42,119 @@ public class NewScreenActivity extends AppCompatActivity implements MQTTService.
             setContentView(R.layout.activity_new_screen);
             Log.d(TAG, "Layout set");
 
-            // Khởi tạo MQTT
-            while (MQTTService.isInitialized){
-                mqttService = MQTTService.getInstance(this);
-                mqttService.setCallback(this);
-            }
-            Log.d(TAG, "MQTT initialized");
+            mqttService = MQTTService.getInstance(this);
+            mqttService.setCallback(new MQTTService.MQTTCallback() {
+                @Override
+                public void onMessageReceived(String topic, String message) {
+                    // Handle incoming messages if needed
+                    Log.d(TAG, "Message received on topic: " + topic + ", message: " + message);
+                }
 
-            // Lấy danh sách thiết bị
+                @Override
+                public void onConnectionLost(Throwable cause) {
+                    Log.e(TAG, "MQTT connection lost: " + cause.getMessage());
+
+                }
+
+                @Override
+                public void onConnected() {
+                    Log.d(TAG, "MQTT connected successfully");
+                    // Optionally update UI or notify user of successful connection
+                }
+            });
+
+            if (!MQTTService.init) {
+                showMQTTConnectionErrorDialog();
+            }
+
+            // Get device list
             DeviceDatabaseHelper dbHelper = new DeviceDatabaseHelper(this);
             deviceList = dbHelper.getAllDevices();
 
             if (deviceList == null || deviceList.isEmpty()) {
                 Log.w(TAG, "No devices found, showing empty state");
                 Toast.makeText(this, "No devices available. Add a new device!", Toast.LENGTH_LONG).show();
-                // Không gọi finish(), để người dùng có thể nhấn FAB
+                // Not calling finish(), allowing user to press FAB
             } else {
-                // Xử lý khi có danh sách thiết bị
+                // Handle when device list is available
             }
 
-            // Thiết lập RecyclerView
+            // Setup RecyclerView
             deviceRecyclerView = findViewById(R.id.deviceRecyclerView);
             deviceRecyclerView.setLayoutManager(new GridLayoutManager(this, 2));
             if (deviceList != null && !deviceList.isEmpty()) {
                 deviceAdapter = new DeviceAdapter(this, deviceList, mqttService);
                 deviceRecyclerView.setAdapter(deviceAdapter);
             } else {
-                // Nếu không có thiết bị, RecyclerView sẽ trống
+                // If no devices, RecyclerView will be empty
                 deviceRecyclerView.setAdapter(null);
             }
             Log.d(TAG, "RecyclerView initialized");
 
-            // Thiết lập FAB
+            // Setup FAB
             FloatingActionButton fabAdd = findViewById(R.id.fabAdd);
             fabAdd.setOnClickListener(v -> {
-                Toast.makeText(this, "Nút thêm được nhấn!", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Add button pressed!", Toast.LENGTH_SHORT).show();
                 Intent intent = new Intent(this, AddDeviceActivity.class);
                 startActivity(intent);
             });
             Log.d(TAG, "FAB initialized");
 
-            // Giữ Splash Screen đến khi giao diện sẵn sàng
+            // Keep Splash Screen until UI is ready
             splashScreen.setKeepOnScreenCondition(() -> {
                 Log.d(TAG, "Splash Screen still visible");
                 return deviceRecyclerView.getAdapter() == null && (deviceList != null && !deviceList.isEmpty());
             });
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            Log.e(TAG, "Error in onCreate: " + e.getMessage());
+            showMQTTConnectionErrorDialog();
         }
-
     }
 
+    // Method to show MQTT connection error dialog
+    private void showMQTTConnectionErrorDialog() {
+        if (isFinishing() || isDestroyed()) {
+            Log.w(TAG, "Cannot show dialog: Activity is finishing or destroyed");
+            return;
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle("Connection Error")
+                .setMessage("Failed to connect to MQTT server. Please check your network and try again.")
+                .setPositiveButton("Retry", (dialog, which) -> {
+                    try {
+                        mqttService.reconnect();
+                        if (mqttService.isConnected()) {
+                            Toast.makeText(this, "MQTT connected!", Toast.LENGTH_SHORT).show();
+                        } else {
+                            // Delay retry to avoid rapid dialog re-display
+                            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
+                                    this::showMQTTConnectionErrorDialog,
+                                    1000
+                            );
+                        }
+                    } catch (Exception e) {
+                        Log.e(TAG, "Reconnection failed: " + e.getMessage(), e);
+                        showMQTTConnectionErrorDialog();
+                    }
+                })
+                .setNegativeButton("Cancel", (dialog, which) -> dialog.dismiss())
+                .setCancelable(false)
+                .show();
+    }
     @Override
     public void onMessageReceived(String topic, String message) {
         runOnUiThread(() -> {
+//            mqttService.subscribe(topic, MqttQos.AT_LEAST_ONCE);
 //            AppDataManager.getInstance().handleMqttMessage(topic, message);
-//            Log.d(TAG, "Received: " + message + " from " + topic);
+//            Log.d(TAG, "Received: AA " + message + " from " + topic);
         });
     }
 
     @Override
     public void onConnectionLost(Throwable cause) {
         Log.e(TAG, "Connection lost: " + cause.getMessage());
+        runOnUiThread(this::showMQTTConnectionErrorDialog);
     }
 
     @Override

@@ -9,30 +9,28 @@ import com.hivemq.client.mqtt.mqtt3.Mqtt3AsyncClient;
 
 public class MQTTService {
     private static final String TAG = "MQTTService";
-    private static final String BROKER_URL = "172.20.10.6";
+    private static final String BROKER_URL = "172.28.31.152";
     private static final int BROKER_PORT = 1883;
-    private static final String DEFAULT_TOPIC_1 = "/devices/notification"; // Topic mặc định 1
-    private static final String DEFAULT_TOPIC_2 = "/speech/command";    // Topic mặc định 2
-    private static MQTTService instance;
+    private static final String NOTIFICATION_TOPIC = "/devices/notification";
+    private static final String COMMAND_TOPIC = "/speech/command";
+    private static volatile MQTTService instance;
     private final Mqtt3AsyncClient client;
     private final String clientId;
-    private MQTTCallback callback;
-    private final DeviceDatabaseHelper dbHelper;
     private final Context context;
-    public static  boolean isInitialized = false;
+    private final DeviceDatabaseHelper dbHelper;
+    private MQTTCallback callback;
+    public static boolean init;
 
-    // Interface để gửi dữ liệu về Activity
     public interface MQTTCallback {
         void onMessageReceived(String topic, String message);
         void onConnectionLost(Throwable cause);
         void onConnected();
     }
 
-    // Constructor riêng tư cho Singleton
     private MQTTService(Context context) {
         this.context = context.getApplicationContext();
         this.clientId = "AndroidClient_" + System.currentTimeMillis();
-        this.dbHelper = DeviceDatabaseHelper.getInstance(context); // Lấy instance
+        this.dbHelper = DeviceDatabaseHelper.getInstance(context);
         this.client = MqttClient.builder()
                 .useMqttVersion3()
                 .serverHost(BROKER_URL)
@@ -40,7 +38,6 @@ public class MQTTService {
                 .identifier(clientId)
                 .buildAsync();
         connect();
-        isInitialized = true;
     }
 
     public static MQTTService getInstance(Context context) {
@@ -54,111 +51,99 @@ public class MQTTService {
         return instance;
     }
 
-    // Gán callback
     public void setCallback(MQTTCallback callback) {
         this.callback = callback;
     }
 
-    // Kết nối MQTT và subscribe 2 topic mặc định
     public void connect() {
-        if (!isConnected()) {
-            client.connectWith()
-                    .send()
-                    .whenComplete((connAck, throwable) -> {
-                        if (throwable != null) {
-                            Log.e(TAG, "Failed to connect: " + throwable.getMessage());
-                            if (callback != null) {
-                                callback.onConnectionLost(throwable);
-                            }
-                        } else {
-                            Log.d(TAG, "Connected to MQTT broker");
-                            // Subscribe to both topics, then trigger callback
-                            subscribe(DEFAULT_TOPIC_1, MqttQos.AT_LEAST_ONCE);
-                            subscribe(DEFAULT_TOPIC_2, MqttQos.AT_LEAST_ONCE);
-                            // Ensure callback is called after subscriptions
-                            client.subscribeWith()
-                                    .topicFilter(DEFAULT_TOPIC_1)
-                                    .qos(MqttQos.AT_LEAST_ONCE)
-                                    .send()
-                                    .thenCompose(v -> client.subscribeWith()
-                                            .topicFilter(DEFAULT_TOPIC_2)
-                                            .qos(MqttQos.AT_LEAST_ONCE)
-                                            .send())
-                                    .whenComplete((subAck, subThrowable) -> {
-                                        if (subThrowable != null) {
-                                            Log.e(TAG, "Subscription failed: " + subThrowable.getMessage());
-                                        } else if (callback != null) {
-                                            callback.onConnected();
-                                        }
-                                    });
-                        }
-                    });
-        } else {
+        if (isConnected()) {
             Log.d(TAG, "Already connected to MQTT broker");
-            // Ensure subscriptions are active
-            subscribe(DEFAULT_TOPIC_1, MqttQos.AT_LEAST_ONCE);
-            subscribe(DEFAULT_TOPIC_2, MqttQos.AT_LEAST_ONCE);
+            subscribeToDefaultTopics();
             if (callback != null) {
                 callback.onConnected();
             }
+            return;
         }
-    }
 
-    // Subscribe vào topic
-    public void subscribe(String topic, MqttQos qos) {
-        if (isConnected()) {
-            client.subscribeWith()
-                    .topicFilter(topic)
-                    .qos(qos)
-                    .callback(publish -> {
-                        String message = new String(publish.getPayloadAsBytes());
-//                        Log.d(TAG, "Received message: " + message + " from topic: " + topic);
-                        subscribe(message, MqttQos.AT_LEAST_ONCE);
-                        dbHelper.handleMqttMessage(topic,message);
+        client.connectWith()
+                .send()
+                .whenComplete((connAck, throwable) -> {
+                    if (throwable != null) {
+                        Log.e(TAG, "Connection failed: " + throwable.getMessage());
                         if (callback != null) {
-                            callback.onMessageReceived(topic, message);
+                            callback.onConnectionLost(throwable);
                         }
-                    })
-                    .send()
-                    .whenComplete((subAck, throwable) -> {
-                        if (throwable != null) {
-                            Log.e(TAG, "Failed to subscribe to " + topic + ": " + throwable.getMessage());
-                        } else {
-                            Log.d(TAG, "Subscribed to topic: " + topic);
+                    } else {
+                        Log.d(TAG, "Connected to MQTT broker");
+                        subscribeToDefaultTopics();
+                        init = true;
+                        if (callback != null) {
+                            callback.onConnected();
                         }
-                    });
-        } else {
+                    }
+                });
+    }
+
+    public void reconnect() {
+        if (!isConnected()) {
+            Log.d(TAG, "Attempting to reconnect to MQTT broker");
+            connect();
+        }
+    }
+
+    public void subscribe(String topic, MqttQos qos) {
+        if (!isConnected()) {
             Log.w(TAG, "Cannot subscribe to " + topic + ": MQTT not connected");
+            return;
         }
+
+        client.subscribeWith()
+                .topicFilter(topic)
+                .qos(qos)
+                .callback(publish -> {
+                    String message = new String(publish.getPayloadAsBytes());
+                    Log.d(TAG, "Received message: " + message + " from topic: " + topic);
+                    dbHelper.handleMqttMessage(topic, message);
+                    if (callback != null) {
+                        callback.onMessageReceived(topic, message);
+                    }
+                })
+                .send()
+                .whenComplete((subAck, throwable) -> {
+                    if (throwable != null) {
+                        Log.e(TAG, "Subscription failed for " + topic + ": " + throwable.getMessage());
+                    } else {
+                        Log.d(TAG, "Subscribed to topic: " + topic);
+                    }
+                });
     }
 
-    // Publish tin nhắn
     public void publish(String topic, String message, MqttQos qos) {
-        if (isConnected()) {
-            client.publishWith()
-                    .topic(topic)
-                    .qos(qos)
-                    .payload(message.getBytes())
-                    .send()
-                    .whenComplete((publish, throwable) -> {
-                        if (throwable != null) {
-                            Log.e(TAG, "Failed to publish to " + topic + ": " + throwable.getMessage());
-                        } else {
-                            Log.d(TAG, "Published: " + message + " to " + topic);
-                        }
-                    });
-        } else {
+        if (!isConnected()) {
             Log.w(TAG, "Cannot publish to " + topic + ": MQTT not connected");
+            return;
         }
+
+        client.publishWith()
+                .topic(topic)
+                .qos(qos)
+                .payload(message.getBytes())
+                .send()
+                .whenComplete((publish, throwable) -> {
+                    if (throwable != null) {
+                        Log.e(TAG, "Publish failed to " + topic + ": " + throwable.getMessage());
+                    } else {
+                        Log.d(TAG, "Published: " + message + " to " + topic);
+                    }
+                });
     }
 
-    // Ngắt kết nối
     public void disconnect() {
         if (isConnected()) {
             client.disconnect()
                     .whenComplete((voidResult, throwable) -> {
                         if (throwable != null) {
-                            Log.e(TAG, "Failed to disconnect: " + throwable.getMessage());
+                            Log.e(TAG, "Disconnect failed: " + throwable.getMessage());
                         } else {
                             Log.d(TAG, "Disconnected from MQTT broker");
                         }
@@ -168,8 +153,12 @@ public class MQTTService {
         }
     }
 
-    // Kiểm tra trạng thái kết nối
     public boolean isConnected() {
         return client.getState().isConnected();
+    }
+
+    private void subscribeToDefaultTopics() {
+        subscribe(NOTIFICATION_TOPIC, MqttQos.AT_LEAST_ONCE);
+        subscribe(COMMAND_TOPIC, MqttQos.AT_LEAST_ONCE);
     }
 }
